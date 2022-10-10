@@ -29,6 +29,21 @@ local function showHelp()
     "brightness while designing in Aseprite and/or viewing the sprite on a modern device."}}
 end
 
+local function round(num)
+  -- Rounds to the nearest integer.
+  if num >= 0 then
+    return math.floor(num+.5) 
+  else
+    return math.ceil(num-.5)
+  end
+end
+
+local function roundChannel(channel, bits)
+  -- Rounds color channel values to nearest multiple, determined by bit depth.
+  mult = 0xff/(0xff >> (8 - bits))
+  return round(channel/mult) << (8 - bits)
+end
+
 local function alterPalette()
   dlg:close()
   
@@ -40,22 +55,35 @@ local function alterPalette()
       -- The multiplier will optionally fix the dynamic range.
       local mply
 
-      if dlg.data.fixDR == true then
+      if dlg.data.fixDR then
         mply = 0xff / mask
       else
         mply = 1
       end
-        
-      for i = 0,#pal-1 do
-        local color = pal:getColor(i)
-        
-        color.red = (color.red & mask) * mply
-        color.green = (color.green & mask) * mply
-        color.blue = (color.blue & mask) * mply
 
-        pal:setColor(i, color)
+      if dlg.data.roundValues then
+        for i = 0,#pal-1 do
+          local color = pal:getColor(i)
+
+          color.red = roundChannel(color.red, dlg.data.bits) * mply
+          color.green = roundChannel(color.green, dlg.data.bits) * mply
+          color.blue = roundChannel(color.blue, dlg.data.bits) * mply
+
+          pal:setColor(i, color)
+        end
+      else
+        for i = 0,#pal-1 do
+          local color = pal:getColor(i)
+
+          color.red = (color.red & mask) * mply
+          color.green = (color.green & mask) * mply
+          color.blue = (color.blue & mask) * mply
+
+          pal:setColor(i, color)
+        end
       end
-    end)
+    end
+  )
 
     app.refresh()
 end
@@ -65,18 +93,25 @@ local function selectBits(value)
   dlg:modify{id="bits", enabled=false}
 end
 
+local function selectPreset()
+  if dlg.data.preset == "Custom" then
+    dlg:modify{id="bits", enabled=true}
+  elseif dlg.data.preset == "Atari ST" then
+    selectBits(3)
+  elseif dlg.data.preset == "Atari STE" then
+    selectBits(4)
+  elseif dlg.data.preset == "Commodore Amiga" then
+    selectBits(4)
+  end
+end
+
 dlg
   :separator{ text="Options" }
-  :radio{ label="Preset:", text="Atari ST", id="preset", selected=true, onclick=function() selectBits(3) end }
+  :combobox{ label="Preset:", id="preset", option="Atari ST", options={"Atari ST", "Atari STE", "Commodore Amiga", "Custom"}, onchange=function() selectPreset() end }
   :newrow()
-  :radio{ text="Atari STE", id="preset", onclick=function() selectBits(4) end }
-  :newrow()
-  :radio{ text="Commodore Amiga", id="preset", onclick=function() selectBits(4) end }
-  :newrow()
-  :radio{ text="Custom:", id="preset", onclick=function() dlg:modify{id="bits", enabled=true} end }
-  :newrow()
-  :slider{ id="bits", label="Bits:", min=1, max=7, value=3, enabled=false}
+  :slider{ label="Bits:", id="bits", min=1, max=7, value=3, enabled=false}
   :check{ label="Fix dynamic range:", id="fixDR", selected=true }
+  :check{ label="Round values:", id="roundValues", selected=false }
 
 dlg:button{ text="&Help",onclick=function() showHelp() end }
 dlg:button{ text="&OK", focus=true, onclick=function() alterPalette() end }
